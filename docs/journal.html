@@ -548,6 +548,118 @@ sales_by_year_and_state_tbl %&gt;%
   )</code></pre>
 <p><img src="journal_files/figure-html/plot-2.png" width="1152" /></p>
 </div>
+<div id="second-challenge-data-acquisition" class="section level2">
+<h2><span class="header-section-number">1.2</span> Second Challenge: Data Acquisition</h2>
+<div id="getting-some-data-via-the-cat-facts-api" class="section level3">
+<h3><span class="header-section-number">1.2.1</span> Getting some Data via the Cat Facts API</h3>
+<p>I chose the cat facts API for this, because I think cats are cool.</p>
+<pre class="r"><code># add libraries
+library(tidyverse)
+library(httr)
+library(jsonlite)
+
+# finds the most popular cat facts         
+resp &lt;- GET(&quot;https://cat-fact.herokuapp.com/facts&quot;)
+
+cat_facts &lt;- resp %&gt;% 
+  .$content %&gt;% 
+  rawToChar() %&gt;% 
+  fromJSON()
+cat_facts_tbl &lt;-cat_facts[[&quot;all&quot;]] %&gt;%
+  as_tibble()
+
+cat_facts_tbl %&gt;% head(n=10)</code></pre>
+<pre><code>## # A tibble: 10 x 6
+##    `_id`   text         type  user$`_id`  $name$first $$last upvotes userUpvoted
+##    &lt;chr&gt;   &lt;chr&gt;        &lt;chr&gt; &lt;chr&gt;       &lt;chr&gt;       &lt;chr&gt;    &lt;int&gt; &lt;lgl&gt;      
+##  1 58e00a~ Cats and hu~ cat   58e007480a~ Kasimir     Schulz      14 NA         
+##  2 5b0c5e~ People who ~ cat   5a9ac18c74~ Alex        Wohlb~       8 NA         
+##  3 58e00a~ Female cats~ cat   58e007480a~ Kasimir     Schulz       8 NA         
+##  4 5b1b40~ Scottish sa~ cat   5a9ac18c74~ Alex        Wohlb~       7 NA         
+##  5 599f89~ Here is a v~ cat   5a9ac18c74~ Alex        Wohlb~       7 NA         
+##  6 58e00b~ Original ki~ cat   58e007480a~ Kasimir     Schulz       6 NA         
+##  7 5b01a4~ The special~ cat   5a9ac18c74~ Alex        Wohlb~       6 NA         
+##  8 58e00a~ A cat&#39;s bra~ cat   58e007480a~ Kasimir     Schulz       6 NA         
+##  9 58e00a~ A cat&#39;s cer~ cat   58e007480a~ Kasimir     Schulz       5 NA         
+## 10 58e00b~ A cat has f~ cat   58e007480a~ Kasimir     Schulz       5 NA</code></pre>
+</div>
+<div id="webscraping" class="section level3">
+<h3><span class="header-section-number">1.2.2</span> Webscraping</h3>
+<p>Admittedly, this code is not great but I was short on time and couldn’t afford to take the time to figure out how to make it more neat. My apologies…</p>
+<pre class="r"><code># WEBSCRAPING ----
+# Get the prices and model names for at least one category
+
+# LIBRARIES ----
+
+library(tidyverse) # Main Package - Loads dplyr, purrr, etc.
+library(rvest)     # HTML Hacking &amp; Web Scraping
+library(xopen)     # Quickly opening URLs
+library(jsonlite)  # converts JSON files to R objects
+library(glue)      # concatenate strings
+library(stringi)   # character string/text processing
+
+# get the url for each bike in the product category &quot;gravel&quot;
+
+gravel_groups_url_tbl &lt;- read_html(&quot;https://www.rosebikes.de/fahrräder/gravel&quot;) %&gt;%
+  html_nodes(css = &quot;.catalog-category-bikes__button&quot;) %&gt;%
+  html_attr(&quot;href&quot;) %&gt;%
+  enframe(name = &quot;position&quot;, value = &quot;subdirectory&quot;) %&gt;%
+  mutate(url = glue(&quot;https://www.rosebikes.de{subdirectory}&quot;)
+  ) 
+
+prices_tbl_1 &lt;- read_html(gravel_groups_url_tbl$url[1]) %&gt;%    
+  html_nodes(css = (&quot;.catalog-category-model__price-current-value&quot;)) %&gt;%
+  html_text() %&gt;%
+  as_tibble()
+model_names_tbl_1 &lt;- read_html(gravel_groups_url_tbl$url[1]) %&gt;%
+  html_nodes(css = (&quot;.catalog-category-model__title&quot;)) %&gt;%
+  html_text() %&gt;%
+  as_tibble()
+
+prices_tbl_2 &lt;- read_html(gravel_groups_url_tbl$url[2]) %&gt;%    
+  html_nodes(css = (&quot;.catalog-category-model__price-current-value&quot;)) %&gt;%
+  html_text() %&gt;%
+  as_tibble()
+model_names_tbl_2 &lt;- read_html(gravel_groups_url_tbl$url[2]) %&gt;%
+  html_nodes(css = (&quot;.catalog-category-model__title&quot;)) %&gt;%
+  html_text() %&gt;%
+  as_tibble()
+
+prices_tbl_3 &lt;- read_html(gravel_groups_url_tbl$url[3]) %&gt;%    
+  html_nodes(css = (&quot;.catalog-category-model__price-current-value&quot;)) %&gt;%
+  html_text() %&gt;%
+  as_tibble()
+model_names_tbl_3 &lt;- read_html(gravel_groups_url_tbl$url[3]) %&gt;%
+  html_nodes(css = (&quot;.catalog-category-model__title&quot;)) %&gt;%
+  html_text() %&gt;%
+  as_tibble()
+
+prices_tbl &lt;- prices_tbl_1 %&gt;%
+  full_join(prices_tbl_2) %&gt;%
+  full_join(prices_tbl_3)
+model_names_tbl &lt;- model_names_tbl_1 %&gt;%
+  full_join(model_names_tbl_2) %&gt;%
+  full_join(model_names_tbl_3)
+
+bikes_tbl &lt;- bind_cols(model_names_tbl,prices_tbl) %&gt;%
+  rename(model = value...1, price = value...2)
+
+head(bikes_tbl, n=10)</code></pre>
+<pre><code>## # A tibble: 10 x 2
+##    model                              price           
+##    &lt;chr&gt;                              &lt;chr&gt;           
+##  1 &quot;\nBACKROAD AL GRX RX400\n&quot;        &quot;\n1.549,00 €\n&quot;
+##  2 &quot;\nBACKROAD AL Apex 1x11\n&quot;        &quot;\n1.599,00 €\n&quot;
+##  3 &quot;\nBACKROAD AL GRX RX600 1x11\n&quot;   &quot;\n1.799,00 €\n&quot;
+##  4 &quot;\nBACKROAD AL GRX RX600\n&quot;        &quot;\n1.849,00 €\n&quot;
+##  5 &quot;\nBACKROAD AL Apex 1x11 MULLET\n&quot; &quot;\n1.899,00 €\n&quot;
+##  6 &quot;\nBACKROAD AL GRX RX810 1x11\n&quot;   &quot;\n1.999,00 €\n&quot;
+##  7 &quot;\nBACKROAD AL GRX RX810\n&quot;        &quot;\n2.049,00 €\n&quot;
+##  8 &quot;\nBACKROAD GRX RX600 1x11\n&quot;      &quot;\n2.599,00 €\n&quot;
+##  9 &quot;\nBACKROAD GRX RX600\n&quot;           &quot;\n2.699,00 €\n&quot;
+## 10 &quot;\nBACKROAD GRX RX810 1x11\n&quot;      &quot;\n2.899,00 €\n&quot;</code></pre>
+</div>
+</div>
 </div>
 
 
