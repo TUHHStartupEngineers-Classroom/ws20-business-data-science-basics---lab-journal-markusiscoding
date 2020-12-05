@@ -16,7 +16,7 @@ output:
 knitr::opts_chunk$set(message=FALSE,warning=FALSE, cache=TRUE)
 ```
 # Data Science Fundamentals 
-## First Challenge: Introduction to Tidyverse
+## Introduction to Tidyverse
 ```{r plot, fig.width=12, fig.height=7}
 # Load libraries ----
 library(tidyverse)
@@ -140,7 +140,7 @@ sales_by_year_and_state_tbl %>%
 
 
 
-## Second Challenge: Data Acquisition
+## Data Acquisition
 ### Getting some Data via the Cat Facts API
 I chose the cat facts API for this, because I think cats are cool. 
 ```{r, eval = TRUE}
@@ -225,3 +225,281 @@ bikes_tbl <- bind_cols(model_names_tbl,prices_tbl) %>%
 
 head(bikes_tbl, n=10)
 ```
+## Data Wrangling
+For this challenge I had to set eval = FALSE as it would produce an error otherwise. Running the code as a script without building the website works fine and the requested outputs are produced.
+
+```{r, eval = FALSE}
+# libraries ----
+library(tidyverse)
+library(vroom)
+library(data.table)
+library(lubridate)
+# select columns and define type ----
+assignee_col_types <- list(
+  id = col_character(), # connects 'patent_assignee' and 'assignee'
+  type = col_double(), # Q1 & Q2: only type 2(US-Comp), Q3: type 2 and type 3(Foreign Comp) 
+  name_first = col_skip(),
+  name_last = col_skip(),
+  organization = col_character() # name of comp
+)
+
+patent_col_types <- list(
+  id = col_character(), # connects 'patent_assignee' and 'patent' and 'uspc'
+  type = col_skip(),
+  number = col_skip(),
+  country = col_skip(), 
+  date = col_date("%Y-%m-%d"), # in year 2019
+  abstract = col_skip(),
+  title = col_skip(),
+  kind = col_skip(),
+  num_claims = col_skip(),
+  filename = col_skip(),
+  withdrawn = col_skip()
+)
+patent_assignee_col_types <- list(
+  patent_id = col_character(), # connects 'patent_assignee' and 'patent'
+  assignee_id = col_character(), # connects 'patent_assignee' and 'assignee'
+  location_id = col_skip()
+)
+uspc_col_types <- list(
+  uuid = col_skip(),
+  patent_id = col_character(), # connects 'patent_assignee' and 'uspc'
+  mainclass_id = col_character(), # to select USPTO tech main class
+  subclass_id = col_skip(),
+  sequence = col_skip()
+  
+)
+# import data ----
+patent_tbl <- vroom(
+  file       = "./DS_101/00_data/patent/patent.tsv", 
+  delim      = "\t", 
+  col_types  = patent_col_types,
+  na         = c("", "NA", "NULL")
+)
+uspc_tbl <- vroom(
+  file       = "./DS_101/00_data/uspc/uspc.tsv", 
+  delim      = "\t", 
+  col_types  = uspc_col_types,
+  na         = c("", "NA", "NULL")
+)
+patent_assignee_tbl <- vroom(
+  file       = "./DS_101/00_data/patent_assignee/patent_assignee.tsv", 
+  delim      = "\t", 
+  col_types  = patent_assignee_col_types,
+  na         = c("", "NA", "NULL")
+)
+assignee_tbl <- vroom(
+  file       = "./DS_101/00_data/assignee/assignee.tsv", 
+  delim      = "\t", 
+  col_types  = assignee_col_types,
+  na         = c("", "NA", "NULL")
+)
+patent_tbl <- patent_tbl %>%
+  setDT()
+patent_assignee_tbl <- patent_assignee_tbl %>%
+  setDT()
+assignee_tbl <- assignee_tbl %>%
+  setDT()
+uspc_tbl <- uspc_tbl %>%
+  setDT()
+
+# rename columns
+setnames(patent_tbl, "id", "patent_id")
+setnames(assignee_tbl, "id", "assignee_id")
+
+### Patent Dominance
+### What US company / corporation has the most patents? 
+### List the 10 US companies with the most assigned/granted patents.
+
+# combine assignee_tbl with patent_assignee_tbl, 
+combined_data_1 <- merge(x = assignee_tbl, y = patent_assignee_tbl, 
+                       by    = "assignee_id", 
+                       all.x = TRUE, 
+                       all.y = FALSE)
+
+setkey(combined_data_1, "assignee_id")
+setorderv(combined_data_1, c("assignee_id", "type", "organization", "patent_id"))
+
+# filter by type to get US companies only, group by organization
+filtered_data_1 <- combined_data_1[type == 2, .(numberOfPatents = .N), by = organization]%>%
+  filter(!is.na(organization))
+
+# reorder in descending number of entries and plot top 10
+filtered_data_1[order(-numberOfPatents)] %>%
+  head(n=10)
+
+### Recent patent activity: 
+### What US company had the most patents granted in 2019? 
+### List the top 10 companies with the most new granted patents for 2019.
+
+combined_data_2 <- merge(x = combined_data_1, y = patent_tbl,
+                         by = "patent_id",
+                         all.x = TRUE,
+                         all.y = TRUE)
+# add year column
+combined_data_2[, year := year(date)]
+# filter for patents granted in 2019, group by organization
+filtered_data_2 <- combined_data_2[year == "2019", .(numOfGrantedPatents = .N), by = organization] %>%
+  filter(!is.na(organization), !is.na(patent_id), type == 2) 
+
+filtered_data_2[order(-numOfGrantedPatents)] %>%
+  head(n=10)
+
+### Innovation in Tech: 
+### What is the most innovative tech sector?
+### For the top 10 companies (worldwide) with the most patents, what are the top 5 USPTO tech main classes?
+
+combined_data_3 <- merge(x = combined_data_2, y = uspc_tbl,
+                         by = "patent_id",
+                         all.x = TRUE,
+                         all.y = FALSE) %>%
+  filter(!is.na(mainclass_id), type == 2 | type ==3)
+grouped_data_3 <- combined_data_3[, .(numOfPatents = .N), by = organization] 
+top_worldwide <- grouped_data_3[order(-numOfPatents)]
+top_10_worldwide <- top_worldwide[1:10]
+final_table <- merge(x = combined_data_3, y = top_10_worldwide,
+      by = "organization",
+      all.x = FALSE,
+      all.y = TRUE) 
+grouped_final_table = final_table[!is.na(organization), .(mainclass_count = .N), by = mainclass_id]
+
+grouped_final_table[order(-mainclass_count)] %>%
+  head(n=5)
+```
+
+## Data Visualization
+### Challenge 1
+```{r, plot = TRUE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+
+# Data Manipulation
+covid_data_tbl <- read_csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv")
+
+
+covid_data_manipulated <- covid_data_tbl %>%
+  select(dateRep, cases, countriesAndTerritories) %>%
+  rename(countries = countriesAndTerritories) %>%
+  filter(countries == "Germany" | countries == "Spain" | countries == "France" | 
+           countries == "United_Kingdom" | countries == "United_States_of_America") %>%
+  pivot_wider(names_from  = countries, 
+            values_from =  cases) %>%
+  set_names("date", "GermanyNew", "SpainNew" , "FranceNew",
+            "United_KingdomNew", "United_States_of_AmericaNew") %>%
+  mutate(date = dmy(date)) %>%
+  arrange(date) %>%
+  mutate(Germany = cumsum(GermanyNew), Spain = cumsum(SpainNew), 
+         France = cumsum(FranceNew), United_Kingdom = cumsum(United_KingdomNew), 
+         United_States_of_America = cumsum(United_States_of_AmericaNew)) %>%
+  select(date, Germany, Spain, France, United_Kingdom, United_States_of_America) %>%
+  pivot_longer(cols = c(2:6), names_to = "country", values_to = "cumulative_cases") %>%
+  mutate(Month = month(date))
+
+colMax <- function(data) sapply(data, max, na.rm = TRUE)
+
+max_data <-colMax(covid_data_manipulated) 
+
+  
+# Data Visualization
+min <- as.Date("2020-1-1")
+max <- NA
+
+
+covid_data_manipulated %>%
+  ggplot((aes(x = date, y = cumulative_cases, color = country))) +
+    geom_line(size = 1)+
+    geom_smooth(method = "loess", span = 0.1)+
+    geom_label(label =  "14.371.633",
+               vjust = 1, 
+               size  = 3,
+               fill  = "#1f78b4",
+               color = "white",
+               fontface = "bold",
+               data = covid_data_manipulated %>%
+                 filter(date == "2020-12-05" & country == "United_States_of_America")
+               ) +
+    theme_dark()+
+    scale_x_date(breaks = date_breaks("months"),
+               labels = date_format("%B"),limits = c(min, max))+
+    theme(axis.text.x = element_text(angle=45))+
+    scale_y_continuous(labels = label_number(accuracy = NULL, scale = 1e-6,
+                        prefix = "", suffix = "M",
+                        big.mark = "", decimal.mark = "."))+
+    labs(
+      title = "COVID-19 confirmed cases worldwide",
+      subtitle = "As of 12/05/2020",
+      caption = "",
+      x = "Year 2020",
+      y = "Cumulative Cases",
+      color = "Country" # Legend text
+    )
+```    
+
+### Challenge 2
+
+```{r, plot = TRUE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(maps)
+require(graphics)
+
+
+
+# Data Manipulation
+covid_data_tbl <- read_csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv") %>%
+  as_tibble()
+
+# calculate mortality rate for each country
+covid_data_manipulated <- covid_data_tbl %>% 
+  select(cases, deaths, countriesAndTerritories ) %>%
+  group_by(countriesAndTerritories) %>%
+  summarise(total_deaths = sum(deaths),total_cases = sum(cases)) %>%
+  ungroup() %>%
+  mutate(mortality_rate = total_deaths/total_cases) %>% 
+  mutate(across(countriesAndTerritories, str_replace_all, "_", " ")) %>%
+  rename(region = countriesAndTerritories) %>%
+  mutate(region = case_when(
+    
+    region == "United Kingdom" ~ "UK",
+    region == "United States of America" ~ "USA",
+    region == "Czechia" ~ "Czech Republic",
+    TRUE ~ region
+    
+  ))
+  
+
+# Data Visualization  
+world <- map_data("world")
+
+mortality_map <- left_join(covid_data_manipulated, world, by = "region")
+
+
+ggplot(mortality_map, aes(map_id = region, fill = mortality_rate))+
+  geom_map(map = mortality_map,  color = "white")+
+  expand_limits(x = mortality_map$long, y = mortality_map$lat)+
+  theme_void()+
+  scale_fill_continuous(low="thistle3", high="darkred", 
+                         guide="colorbar",na.value="grey")+
+  # remove axis labels
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+
+  labs(
+    title = "Confirmed COVID-19 deaths relative to the size of the population",
+    subtitle = "More than 1.2 Million confirmed COVID-19 deaths worldwide",
+    caption = "",
+    x = "",
+    y = "",
+    color = "Mortality Rate" # Legend text
+  )
+  
+```
+  
+
+
+
