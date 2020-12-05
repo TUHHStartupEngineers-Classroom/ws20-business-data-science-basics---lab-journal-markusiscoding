@@ -226,7 +226,7 @@ bikes_tbl <- bind_cols(model_names_tbl,prices_tbl) %>%
 head(bikes_tbl, n=10)
 ```
 ## Data Wrangling
-For this challenge I had to set eval = FALSE as it would produce an error otherwise. Running the code as a script without building the website works fine and the requested outputs are produced.
+For this challenge I had to set eval = FALSE as it would produce an error otherwise. Running the code as a script without building the website works fine and the requested outputs are produced. You can find the script here: https://github.com/TUHHStartupEngineers/ws20-business-data-science-basics---lab-journal-markusiscoding/tree/master/DS_101/00_scripts
 
 ```{r, eval = FALSE}
 # libraries ----
